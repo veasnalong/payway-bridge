@@ -1,5 +1,6 @@
 import os, asyncio, logging, aiohttp
 from telethon import TelegramClient, events
+from telethon.utils import get_peer_id
 
 API_ID       = int(os.environ.get('BRIDGE_API_ID', '0'))
 API_HASH     = os.environ.get('BRIDGE_API_HASH', 'YOUR_API_HASH')
@@ -16,17 +17,19 @@ client = TelegramClient('bridge_session', API_ID, API_HASH)
 async def on_msg(event):
     text = event.raw_text or ''
     if not text: return
-    # Only forward PayWay messages
     if 'paid by' not in text.lower() and 'trx. id' not in text.lower(): return
-    logger.info('PayWay msg detected in chat %s - forwarding...', event.chat_id)
+    # Get full chat_id with -100 prefix for supergroups
+    chat = await event.get_chat()
+    chat_id = get_peer_id(chat)
+    logger.info('PayWay detected in chat %s - forwarding...', chat_id)
     try:
         async with aiohttp.ClientSession() as session:
-            await session.post(
+            resp = await session.post(
                 BOT_URL+'/webhook',
-                json={'text': text, 'chat_id': event.chat_id, 'secret': SECRET},
+                json={'text': text, 'chat_id': chat_id, 'secret': SECRET},
                 timeout=aiohttp.ClientTimeout(total=10)
             )
-        logger.info('Forwarded to bot OK')
+            logger.info('Forwarded OK - status %s', resp.status)
     except Exception as e:
         logger.error('Forward failed: %s', e)
 
